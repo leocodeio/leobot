@@ -24,7 +24,14 @@ export default function Home() {
   });
 
   const startFlow = api.auth.startDeviceFlow.useMutation({
-    onSuccess: (data) => setDeviceFlow(data),
+    onSuccess: (data) => {
+      console.log("Device flow data received:", data);
+      setDeviceFlow(data);
+    },
+    onError: (err) => {
+      console.error("Device flow error:", err);
+      alert("Login failed: " + err.message);
+    },
   });
 
   const pollToken = api.auth.pollToken.useMutation({

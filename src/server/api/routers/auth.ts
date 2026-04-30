@@ -17,6 +17,7 @@ export const authRouter = createTRPCRouter({
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+        "User-Agent": "Leobot-Assistant",
       },
       body: JSON.stringify({
         client_id: GITHUB_CLIENT_ID,
@@ -24,7 +25,20 @@ export const authRouter = createTRPCRouter({
       }),
     });
 
-    return await response.json() as {
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("GitHub Device Flow Error:", errorText);
+      throw new Error(`GitHub Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("Device Flow Started:", data);
+    
+    if (data.error) {
+      throw new Error(data.error_description || data.error);
+    }
+
+    return data as {
       device_code: string;
       user_code: string;
       verification_uri: string;
@@ -41,6 +55,7 @@ export const authRouter = createTRPCRouter({
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
+          "User-Agent": "Leobot-Assistant",
         },
         body: JSON.stringify({
           client_id: GITHUB_CLIENT_ID,
@@ -52,7 +67,10 @@ export const authRouter = createTRPCRouter({
       const data = await response.json() as {
         access_token?: string;
         error?: string;
+        error_description?: string;
       };
+
+      console.log("Polling Status:", data.error || "Success");
 
       if (data.access_token) {
         await ctx.db.gitHubAuth.upsert({
