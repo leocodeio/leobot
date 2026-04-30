@@ -1,6 +1,8 @@
 # Personal Manager Agent
 
 ## Implementation
+- **Manager:** Bun (used for all commands).
+- **Search:** Always use web search for latest info.
 - **Stack:** T3 (Next.js, TypeScript, tRPC, Prisma, Tailwind).
 - **Interface:** Web-based chat at `/chat`.
 - **Backend:** `agentRouter` in `src/server/api/routers/agent.ts`.
