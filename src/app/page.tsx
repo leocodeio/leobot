@@ -11,16 +11,31 @@ import { api } from "~/trpc/react";
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [isTopMode, setIsTopMode] = useState(false);
-  
+  const [deviceFlow, setDeviceFlow] = useState<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    interval: number;
+  } | null>(null);
+
   const utils = api.useUtils();
   const { data: authStatus } = api.auth.getGitHubStatus.useQuery(undefined, {
     enabled: mounted,
   });
-  
-  const saveToken = api.auth.saveGitHubToken.useMutation({
-    onSuccess: () => utils.auth.getGitHubStatus.invalidate(),
+
+  const startFlow = api.auth.startDeviceFlow.useMutation({
+    onSuccess: (data) => setDeviceFlow(data),
   });
-  
+
+  const pollToken = api.auth.pollToken.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        setDeviceFlow(null);
+        utils.auth.getGitHubStatus.invalidate();
+      }
+    },
+  });
+
   const deleteToken = api.auth.deleteGitHubToken.useMutation({
     onSuccess: () => utils.auth.getGitHubStatus.invalidate(),
   });
@@ -28,6 +43,17 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Polling logic
+  useEffect(() => {
+    if (!deviceFlow) return;
+
+    const intervalId = setInterval(() => {
+      pollToken.mutate({ device_code: deviceFlow.device_code });
+    }, deviceFlow.interval * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [deviceFlow, pollToken]);
 
   const {
     transcript,
@@ -44,15 +70,6 @@ export default function Home() {
       resetTranscript();
     }
   }, [isTopMode, resetTranscript]);
-
-  const handleConnect = () => {
-    const token = window.prompt("Enter your GitHub Copilot Token (ghu_...):");
-    if (token && token.startsWith("ghu_")) {
-      saveToken.mutate({ token });
-    } else if (token) {
-      alert("Invalid token. Must start with 'ghu_'.");
-    }
-  };
 
   if (!mounted) {
     return (
@@ -103,15 +120,15 @@ export default function Home() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleConnect}
-              disabled={isCopilotConnected}
+              onClick={() => !isCopilotConnected && startFlow.mutate()}
+              disabled={isCopilotConnected || startFlow.isPending}
               className={`text-sm font-semibold border-2 transition-all ${
                 isCopilotConnected 
                   ? "border-green-500 text-green-700 bg-green-50 cursor-default" 
                   : "border-gray-200 text-gray-400 hover:bg-gray-50"
               }`}
             >
-              Copilot: {isCopilotConnected ? "ACTIVE" : "CONNECT"}
+              Copilot: {isCopilotConnected ? "ACTIVE" : startFlow.isPending ? "CONNECTING..." : "CONNECT"}
             </Button>
             {isCopilotConnected && (
               <Button
@@ -125,6 +142,17 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {deviceFlow && (
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg animate-in fade-in slide-in-from-top-2">
+            <p className="text-sm font-medium mb-2">Login to GitHub:</p>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-gray-500">1. Go to <a href={deviceFlow.verification_uri} target="_blank" rel="noreferrer" className="text-blue-500 underline font-bold">{deviceFlow.verification_uri}</a></p>
+              <p className="text-xs text-gray-500">2. Enter code: <span className="bg-white border px-2 py-1 rounded font-mono text-lg font-bold text-black">{deviceFlow.user_code}</span></p>
+              <p className="text-[10px] text-gray-400 mt-2 animate-pulse italic">Waiting for authorization...</p>
+            </div>
+          </div>
+        )}
 
         {isTopMode && ( transcript || listening ) && (
           <div className="w-full animate-in fade-in slide-in-from-top-2 duration-300">
