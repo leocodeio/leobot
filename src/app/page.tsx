@@ -6,11 +6,24 @@ import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognitio
 import { Switch } from "~/components/ui/switch";
 import { Label } from "~/components/ui/label";
 import { Button } from "~/components/ui/button";
+import { api } from "~/trpc/react";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [isTopMode, setIsTopMode] = useState(false);
-  const [isCopilotConnected, setIsCopilotConnected] = useState(false);
+  
+  const utils = api.useUtils();
+  const { data: authStatus } = api.auth.getGitHubStatus.useQuery(undefined, {
+    enabled: mounted,
+  });
+  
+  const saveToken = api.auth.saveGitHubToken.useMutation({
+    onSuccess: () => utils.auth.getGitHubStatus.invalidate(),
+  });
+  
+  const deleteToken = api.auth.deleteGitHubToken.useMutation({
+    onSuccess: () => utils.auth.getGitHubStatus.invalidate(),
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -32,6 +45,15 @@ export default function Home() {
     }
   }, [isTopMode, resetTranscript]);
 
+  const handleConnect = () => {
+    const token = window.prompt("Enter your GitHub Copilot Token (ghu_...):");
+    if (token && token.startsWith("ghu_")) {
+      saveToken.mutate({ token });
+    } else if (token) {
+      alert("Invalid token. Must start with 'ghu_'.");
+    }
+  };
+
   if (!mounted) {
     return (
       <main className="min-h-screen bg-white p-8">
@@ -49,6 +71,8 @@ export default function Home() {
       </main>
     );
   }
+
+  const isCopilotConnected = !!authStatus?.isConnected;
 
   return (
     <main className="min-h-screen bg-white text-black font-sans p-8">
@@ -79,15 +103,11 @@ export default function Home() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                if (!isCopilotConnected) {
-                  // Simulate connect
-                  setIsCopilotConnected(true);
-                }
-              }}
+              onClick={handleConnect}
+              disabled={isCopilotConnected}
               className={`text-sm font-semibold border-2 transition-all ${
                 isCopilotConnected 
-                  ? "border-green-500 text-green-700 bg-green-50" 
+                  ? "border-green-500 text-green-700 bg-green-50 cursor-default" 
                   : "border-gray-200 text-gray-400 hover:bg-gray-50"
               }`}
             >
@@ -97,7 +117,7 @@ export default function Home() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setIsCopilotConnected(false)}
+                onClick={() => deleteToken.mutate()}
                 className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
               >
                 Delete
